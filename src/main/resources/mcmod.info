@@ -1,0 +1,8 @@
+[{
+  "modid": "rodmacro",
+  "name": "RodMacro",
+  "description": "Fishing rod hotbar swap macro",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "authorList": []
+}]

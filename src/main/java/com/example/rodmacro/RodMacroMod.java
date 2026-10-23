@@ -1,5 +1,6 @@
 package com.example.rodmacro;
 
+import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
@@ -17,5 +18,6 @@ public class RodMacroMod {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         MinecraftForge.EVENT_BUS.register(new RodMacro());
+        ClientCommandHandler.instance.registerCommand(new RodMacroCommand());
     }
 }

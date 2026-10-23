@@ -1,0 +1,38 @@
+name: Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 8
+
+      - name: Install Gradle 2.14.1 (needed by ForgeGradle 2.1)
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-2.14.1-bin.zip
+          unzip -q gradle-2.14.1-bin.zip -d "$HOME"
+          echo "$HOME/gradle-2.14.1/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        run: |
+          gradle setupCIWorkspace --no-daemon
+          gradle build --no-daemon
+          ls -l build/libs
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: RodMacro
+          path: build/libs/*.jar

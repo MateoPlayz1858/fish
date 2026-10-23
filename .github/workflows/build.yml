@@ -19,10 +19,11 @@ jobs:
           distribution: temurin
           java-version: 8
 
-      - name: Set up Gradle 2.14.1 (needed by ForgeGradle 2.1)
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: 2.14.1
+      - name: Install Gradle 2.14.1 (needed by ForgeGradle 2.1)
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-2.14.1-bin.zip
+          unzip -q gradle-2.14.1-bin.zip -d "$HOME"
+          echo "$HOME/gradle-2.14.1/bin" >> "$GITHUB_PATH"
 
       - name: Build
         run: bash build.sh

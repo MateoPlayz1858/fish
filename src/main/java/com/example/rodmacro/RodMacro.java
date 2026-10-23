@@ -22,19 +22,28 @@ public class RodMacro {
     private enum Stage { IDLE, WAIT_SWAP, WAIT_BACK, WAIT_RECAST }
     private Stage stage = Stage.IDLE;
     private long nextTime;
+    private int ticksWaited;
+    private int minTicks;
 
     public static void loadConfig(File file) {
         Configuration cfg = new Configuration(file);
         enabled  = cfg.getBoolean("enabled", "rodmacro", true, "Enable rod macro");
         rodSlot  = cfg.getInt("rodSlot", "rodmacro", 2, 1, 9, "Hotbar slot of your rod");
         swapSlot = cfg.getInt("swapSlot", "rodmacro", 4, 1, 9, "Slot to switch to after casting");
-        delayMs  = cfg.getInt("delayMs", "rodmacro", 50, 0, 100, "Delay between steps in ms");
+        delayMs  = cfg.getInt("delayMs", "rodmacro", 50, 0, 100, "Extra delay between steps in ms");
         if (cfg.hasChanged()) cfg.save();
     }
 
     private boolean holdingRod() {
         ItemStack held = mc.thePlayer.getHeldItem();
         return held != null && held.getItem() instanceof ItemFishingRod;
+    }
+
+    private void next(Stage s, int minTicksForStep) {
+        stage = s;
+        minTicks = minTicksForStep;
+        ticksWaited = 0;
+        nextTime = System.currentTimeMillis() + delayMs;
     }
 
     @SubscribeEvent
@@ -45,25 +54,29 @@ public class RodMacro {
         if (mc.thePlayer.inventory.currentItem != rodSlot - 1) return;
         if (!holdingRod()) return;
 
-        // the normal click (cast or reel in) goes through, then we run the cycle
-        stage = Stage.WAIT_SWAP;
-        nextTime = System.currentTimeMillis() + delayMs;
+        // the normal click (cast or reel in) goes through first
+        next(Stage.WAIT_SWAP, 1);
+    }
+
+    @SubscribeEvent
+    public void onClientTick(TickEvent.ClientTickEvent e) {
+        if (e.phase == TickEvent.Phase.END && stage != Stage.IDLE) ticksWaited++;
     }
 
     @SubscribeEvent
     public void onRender(TickEvent.RenderTickEvent e) {
         if (e.phase != TickEvent.Phase.START || stage == Stage.IDLE) return;
         if (mc.thePlayer == null || mc.theWorld == null) { stage = Stage.IDLE; return; }
-        if (System.currentTimeMillis() < nextTime) return;
+        if (ticksWaited < minTicks || System.currentTimeMillis() < nextTime) return;
 
         switch (stage) {
             case WAIT_SWAP:
                 mc.thePlayer.inventory.currentItem = swapSlot - 1;
-                stage = Stage.WAIT_BACK;
+                next(Stage.WAIT_BACK, 2);   // stay on the other slot for 2+ ticks so the old bobber is really gone
                 break;
             case WAIT_BACK:
                 mc.thePlayer.inventory.currentItem = rodSlot - 1;
-                stage = Stage.WAIT_RECAST;
+                next(Stage.WAIT_RECAST, 2); // give the server 2+ ticks to see the rod again
                 break;
             case WAIT_RECAST:
                 // recast only if the bobber is gone, so we never reel in by accident
@@ -76,6 +89,5 @@ public class RodMacro {
             default:
                 stage = Stage.IDLE;
         }
-        nextTime = System.currentTimeMillis() + delayMs;
     }
 }

@@ -20,9 +20,12 @@ public class RodMacro {
     public static int delayMs = 50;      // 0-200, extra time spent on the other slot
     public static int minSwapTicks = 2;  // 1-5, game ticks (50ms each) spent on the other slot
 
+    private static final long TIMEOUT_MS = 1500; // safety: never get stuck on the other slot
+
     private static Configuration cfg;
 
     private boolean active = false;
+    private long startTime;
     private long holdUntil;
     private int ticksWaited;
 
@@ -32,7 +35,7 @@ public class RodMacro {
         rodSlot      = cfg.getInt("rodSlot", "rodmacro", 2, 1, 9, "Hotbar slot of your rod");
         swapSlot     = cfg.getInt("swapSlot", "rodmacro", 4, 1, 9, "Slot to switch to");
         delayMs      = cfg.getInt("delayMs", "rodmacro", 50, 0, 200, "Extra time on the other slot in ms");
-        minSwapTicks = cfg.getInt("minSwapTicks", "rodmacro", 2, 1, 5, "Min game ticks on the other slot (raise if it reels in instead of casting)");
+        minSwapTicks = cfg.getInt("minSwapTicks", "rodmacro", 2, 1, 5, "Min game ticks on the other slot");
         if (cfg.hasChanged()) cfg.save();
     }
 
@@ -65,12 +68,13 @@ public class RodMacro {
         if (mc.thePlayer.inventory.currentItem != rodSlot - 1) return;
         if (!holdingRod()) return;
 
-        // cancel the normal click, the swap itself reels in any bobber that's out
+        // cancel the normal click, the swap itself removes any bobber that's out
         e.setCanceled(true);
         mc.thePlayer.inventory.currentItem = swapSlot - 1;
         active = true;
         ticksWaited = 0;
-        holdUntil = System.currentTimeMillis() + delayMs;
+        startTime = System.currentTimeMillis();
+        holdUntil = startTime + delayMs;
     }
 
     @SubscribeEvent
@@ -82,7 +86,15 @@ public class RodMacro {
     public void onRender(TickEvent.RenderTickEvent e) {
         if (e.phase != TickEvent.Phase.START || !active) return;
         if (mc.thePlayer == null || mc.theWorld == null) { active = false; return; }
-        if (ticksWaited < minSwapTicks || System.currentTimeMillis() < holdUntil) return;
+
+        long now = System.currentTimeMillis();
+        boolean timedOut = now - startTime > TIMEOUT_MS;
+
+        if (!timedOut) {
+            if (ticksWaited < minSwapTicks || now < holdUntil) return;
+            // wait until the old bobber is really gone, otherwise the next use would reel it in
+            if (mc.thePlayer.fishEntity != null) return;
+        }
 
         // back to the rod and cast once
         mc.thePlayer.inventory.currentItem = rodSlot - 1;

@@ -17,26 +17,27 @@ public class RodMacro {
     // config (slots are 1-9 as shown on your hotbar)
     public static boolean enabled = true;
     public static int swapSlot = 4;
-    public static int delayMs = 0; // 0-200, wait between reeling in and recasting
+    public static int delayMs = 50; // 0-200, how long the hotbar stays on the swap slot
 
     private static Configuration cfg;
 
-    private boolean pending = false;
+    private enum Stage { IDLE, SWAP_AWAY, SWAP_BACK }
+    private Stage stage = Stage.IDLE;
     private long runAt;
-    private int returnSlot;
+    private int rodSlotIndex;
 
     public static void loadConfig(File file) {
         cfg = new Configuration(file);
         enabled  = cfg.getBoolean("enabled", "rodmacro", true, "Enable rod macro");
-        swapSlot = cfg.getInt("swapSlot", "rodmacro", 4, 1, 9, "Slot to switch to");
-        delayMs  = cfg.getInt("delayMs", "rodmacro", 0, 0, 200, "Wait between reeling in and recasting, in ms");
+        swapSlot = cfg.getInt("swapSlot", "rodmacro", 4, 1, 9, "Slot to scroll to");
+        delayMs  = cfg.getInt("delayMs", "rodmacro", 50, 0, 200, "How long the hotbar stays on the swap slot, in ms");
         if (cfg.hasChanged()) cfg.save();
     }
 
     public static void setDelay(int ms) {
         delayMs = ms;
         if (cfg != null) {
-            cfg.get("rodmacro", "delayMs", 0).set(ms);
+            cfg.get("rodmacro", "delayMs", 50).set(ms);
             cfg.save();
         }
     }
@@ -54,7 +55,8 @@ public class RodMacro {
         return held != null && held.getItem() instanceof ItemFishingRod;
     }
 
-    private void sendSlot(int slot) {
+    private void scrollTo(int slot) {
+        mc.thePlayer.inventory.currentItem = slot;
         if (mc.getNetHandler() != null) {
             mc.getNetHandler().addToSendQueue(new C09PacketHeldItemChange(slot));
         }
@@ -64,35 +66,41 @@ public class RodMacro {
     public void onMouse(MouseEvent e) {
         if (!enabled || e.button != 1 || !e.buttonstate) return;
         if (mc.thePlayer == null || mc.currentScreen != null) return;
-        if (pending) return;
+        if (stage != Stage.IDLE) { e.setCanceled(true); return; } // ignore clicks mid-cycle
         if (!holdingRod()) return;
 
         int current = mc.thePlayer.inventory.currentItem;
-        if (current == swapSlot - 1) return; // rod is in the swap slot, nothing to swap to
+        if (current == swapSlot - 1) return; // rod is in the swap slot, nothing to scroll to
 
-        // swap away and back BEFORE the click, so the cast/reel-in is always the last thing the server sees
-        sendSlot(swapSlot - 1);
-        sendSlot(current);
+        rodSlotIndex = current;
 
-        // the click itself goes through normally right after this.
-        // if a bobber is out, this click reels it in, so recast afterwards
-        if (mc.thePlayer.fishEntity != null) {
-            returnSlot = current;
-            pending = true;
-            runAt = System.currentTimeMillis() + delayMs;
+        // bobber out: let the click go through, it reels in.
+        // nothing out: cancel the click, the cast happens at the end of the cycle.
+        if (mc.thePlayer.fishEntity == null) {
+            e.setCanceled(true);
         }
+
+        stage = Stage.SWAP_AWAY;
+        runAt = 0; // scroll away on the next frame, after the click has been handled
     }
 
     @SubscribeEvent
     public void onRender(TickEvent.RenderTickEvent e) {
-        if (e.phase != TickEvent.Phase.START || !pending) return;
-        if (mc.thePlayer == null || mc.theWorld == null) { pending = false; return; }
+        if (e.phase != TickEvent.Phase.START || stage == Stage.IDLE) return;
+        if (mc.thePlayer == null || mc.theWorld == null) { stage = Stage.IDLE; return; }
         if (System.currentTimeMillis() < runAt) return;
 
-        pending = false;
-        if (mc.thePlayer.inventory.currentItem != returnSlot || !holdingRod()) return;
-
-        mc.playerController.sendUseItem(mc.thePlayer, mc.theWorld, mc.thePlayer.getHeldItem());
-        mc.thePlayer.swingItem();
+        if (stage == Stage.SWAP_AWAY) {
+            scrollTo(swapSlot - 1);
+            stage = Stage.SWAP_BACK;
+            runAt = System.currentTimeMillis() + delayMs;
+        } else {
+            scrollTo(rodSlotIndex);
+            if (holdingRod() && mc.thePlayer.fishEntity == null) {
+                mc.playerController.sendUseItem(mc.thePlayer, mc.theWorld, mc.thePlayer.getHeldItem());
+                mc.thePlayer.swingItem();
+            }
+            stage = Stage.IDLE;
+        }
     }
 }

@@ -17,12 +17,11 @@ public class RodMacro {
     // config (slots are 1-9 as shown on your hotbar)
     public static boolean enabled = true;
     public static int swapSlot = 4;
-    public static int delayMs = 0; // 0-200, wait after your click before the swap and recast
+    public static int delayMs = 0; // 0-200, wait between reeling in and recasting
 
     private static Configuration cfg;
 
     private boolean pending = false;
-    private boolean reelIn = false;
     private long runAt;
     private int returnSlot;
 
@@ -30,7 +29,7 @@ public class RodMacro {
         cfg = new Configuration(file);
         enabled  = cfg.getBoolean("enabled", "rodmacro", true, "Enable rod macro");
         swapSlot = cfg.getInt("swapSlot", "rodmacro", 4, 1, 9, "Slot to switch to");
-        delayMs  = cfg.getInt("delayMs", "rodmacro", 0, 0, 200, "Wait after your click before the swap and recast, in ms");
+        delayMs  = cfg.getInt("delayMs", "rodmacro", 0, 0, 200, "Wait between reeling in and recasting, in ms");
         if (cfg.hasChanged()) cfg.save();
     }
 
@@ -71,11 +70,17 @@ public class RodMacro {
         int current = mc.thePlayer.inventory.currentItem;
         if (current == swapSlot - 1) return; // rod is in the swap slot, nothing to swap to
 
-        // the click itself is NOT cancelled, it casts or reels in like normal
-        reelIn = mc.thePlayer.fishEntity != null; // a bobber is out, so this click reels it in
-        returnSlot = current;
-        pending = true;
-        runAt = System.currentTimeMillis() + delayMs;
+        // swap away and back BEFORE the click, so the cast/reel-in is always the last thing the server sees
+        sendSlot(swapSlot - 1);
+        sendSlot(current);
+
+        // the click itself goes through normally right after this.
+        // if a bobber is out, this click reels it in, so recast afterwards
+        if (mc.thePlayer.fishEntity != null) {
+            returnSlot = current;
+            pending = true;
+            runAt = System.currentTimeMillis() + delayMs;
+        }
     }
 
     @SubscribeEvent
@@ -85,16 +90,9 @@ public class RodMacro {
         if (System.currentTimeMillis() < runAt) return;
 
         pending = false;
-        if (mc.thePlayer.inventory.currentItem != returnSlot) return; // you changed slot yourself, stop
+        if (mc.thePlayer.inventory.currentItem != returnSlot || !holdingRod()) return;
 
-        // both slot packets go out together, so the server never sees you without the rod
-        sendSlot(swapSlot - 1);
-        sendSlot(returnSlot);
-
-        // if your click reeled the bobber in, cast again right away
-        if (reelIn && holdingRod()) {
-            mc.playerController.sendUseItem(mc.thePlayer, mc.theWorld, mc.thePlayer.getHeldItem());
-            mc.thePlayer.swingItem();
-        }
+        mc.playerController.sendUseItem(mc.thePlayer, mc.theWorld, mc.thePlayer.getHeldItem());
+        mc.thePlayer.swingItem();
     }
 }

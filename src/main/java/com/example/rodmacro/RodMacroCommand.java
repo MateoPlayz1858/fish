@@ -15,7 +15,7 @@ public class RodMacroCommand extends CommandBase {
 
     @Override
     public String getCommandUsage(ICommandSender sender) {
-        return "/rodmacro <delay <0-200> | ticks <1-5>>";
+        return "/rodmacro <delay <0-200> | swap <1-9>>";
     }
 
     @Override
@@ -45,15 +45,15 @@ public class RodMacroCommand extends CommandBase {
             if (ms == null) return;
             RodMacro.setDelay(ms);
             msg(sender, EnumChatFormatting.GREEN + "Rod macro delay set to " + ms + "ms");
-        } else if (sub.equals("ticks")) {
+        } else if (sub.equals("swap")) {
             if (args.length == 1) {
-                msg(sender, EnumChatFormatting.YELLOW + "Min swap ticks is " + RodMacro.minSwapTicks + ". Set it with /rodmacro ticks <1-5>");
+                msg(sender, EnumChatFormatting.YELLOW + "Swap slot is " + RodMacro.swapSlot + ". Set it with /rodmacro swap <1-9>");
                 return;
             }
-            Integer t = parse(sender, args[1], 1, 5);
-            if (t == null) return;
-            RodMacro.setMinSwapTicks(t);
-            msg(sender, EnumChatFormatting.GREEN + "Rod macro min swap ticks set to " + t);
+            Integer s = parse(sender, args[1], 1, 9);
+            if (s == null) return;
+            RodMacro.setSwapSlot(s);
+            msg(sender, EnumChatFormatting.GREEN + "Rod macro swap slot set to " + s);
         } else {
             usage(sender);
         }
@@ -76,7 +76,7 @@ public class RodMacroCommand extends CommandBase {
 
     private void usage(ICommandSender sender) {
         msg(sender, EnumChatFormatting.YELLOW + "Usage: /rodmacro delay <0-200> (now " + RodMacro.delayMs
-                + "ms), /rodmacro ticks <1-5> (now " + RodMacro.minSwapTicks + ")");
+                + "ms), swap <1-9> (now " + RodMacro.swapSlot + ")");
     }
 
     private void msg(ICommandSender sender, String text) {
